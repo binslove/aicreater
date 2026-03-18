@@ -1,144 +1,222 @@
-
 # AI Creator Backend
 
 AI 기반 콘텐츠 생성 플랫폼의 백엔드 서버입니다.  
-사용자 인증, 프로젝트 관리, 작품(Media) 관리, 좋아요, 댓글, 조회수 통계 기능을 제공합니다.
+이미지 생성 작업(Job) 관리와 미디어 자산(MediaAsset) 저장을 담당합니다.
 
 ---
 
-## 1. 프로젝트 개요
+# 1. 핵심 개념
 
-이 프로젝트는 AI로 생성되는 이미지/콘텐츠를 저장하고, 사용자들이 작품에 대해 상호작용할 수 있도록 설계된 백엔드 서버입니다.
+이 서버는 다음 구조로 동작합니다:
 
-현재 구현된 핵심 목표는 다음과 같습니다.
 
-- JWT 기반 로그인/인증
-- 프로젝트 단위 작업 관리
-- 작품(Media) 메타데이터 저장
-- 작품 설명 / 공개 여부 관리
-- 좋아요 / 댓글 기능
-- 조회수 및 통계 집계
+Frontend → Backend → Model (ComfyUI 등)
+↓
+Frontend ← Backend ← Model 결과
+
 
 ---
 
-## 2. 기술 스택
+# 2. 전체 흐름 (중요)
 
-- FastAPI
-- PostgreSQL
-- SQLAlchemy
-- Alembic
-- JWT Authentication
-- Passlib (bcrypt)
-- Uvicorn
-- Docker
 
----
+프론트 → 이미지 생성 요청
+POST /image-jobs
 
-## 3. 현재 구현된 기능
+백엔드 → job 생성 (status = queued)
 
-### 3.1 인증
-- 회원가입
-- 로그인
-- JWT 토큰 발급
-- `/auth/me`를 통한 현재 사용자 조회
-- 인증 기반 API 접근 제어
+모델 서버 → job 처리 시작
+PATCH /image-jobs/{job_id} (status = running)
 
-### 3.2 프로젝트 관리
-- 프로젝트 생성
-- 프로젝트 조회
-- 프로젝트별 작품 관리 기반 구조
+모델 → 이미지 생성 + 스토리지 업로드
 
-### 3.3 작품(Media) 관리
-- 작품 메타데이터 저장
-- 작품 제목(title) 저장
-- 작품 설명(description) 저장
-- 공개 여부(visibility) 저장
-- 프로젝트별 작품 조회
-- 작품 상세 조회
+모델 → 결과 전송
+PATCH /image-jobs/{job_id} (status = completed + output_payload)
 
-### 3.4 좋아요
-- 작품 좋아요 추가
-- 작품 좋아요 취소
-- 작품 좋아요 수 조회
-- 인증 사용자 기준 처리
+백엔드 → media_meta 자동 생성
 
-### 3.5 댓글
-- 댓글 작성
-- 댓글 목록 조회
-- 댓글 수정
-- 댓글 삭제
-- soft delete 적용
-- 본인 댓글만 수정/삭제 가능
+프론트 → 결과 조회
+GET /media/project/{project_id}
 
-### 3.6 통계(Media Stats)
-- 조회수(view_count)
-- 좋아요 수(like_count)
-- 댓글 수(comment_count)
-- 북마크 수(bookmark_count)
-- 작품 상세 조회 시 조회수 증가
-- 좋아요/댓글 변경 시 통계 반영
+프론트 → 이미지 렌더링 (public_url)
+
 
 ---
 
-## 4. 프로젝트 구조
+# 3. 인증 방식
 
-```text
-backend/
-├── app/
-│   ├── api/
-│   │   ├── deps.py
-│   │   └── routes/
-│   │       ├── auth.py
-│   │       ├── users.py
-│   │       ├── projects.py
-│   │       ├── media.py
-│   │       ├── artwork_likes.py
-│   │       ├── comments.py
-│   │       ├── follow.py
-│   │       └── image_jobs.py
-│   │
-│   ├── core/
-│   │   ├── config.py
-│   │   ├── security.py
-│   │   └── job_constants.py
-│   │
-│   ├── crud/
-│   │   ├── auth.py
-│   │   ├── user.py
-│   │   ├── project.py
-│   │   ├── media.py
-│   │   ├── artwork_like.py
-│   │   ├── comment.py
-│   │   ├── follow.py
-│   │   └── image_job.py
-│   │
-│   ├── db/
-│   │   ├── database.py
-│   │   └── models.py
-│   │
-│   ├── schemas/
-│   │   ├── auth.py
-│   │   ├── user.py
-│   │   ├── project.py
-│   │   ├── media.py
-│   │   ├── artwork_like.py
-│   │   ├── comment.py
-│   │   ├── follow.py
-│   │   └── image_job.py
-│   │
-│   ├── services/
-│   │   ├── image_generation_service.py
-│   │   ├── comfyui/
-│   │   │   ├── client.py
-│   │   │   └── workflow_builder.py
-│   │   └── storage/
-│   │       ├── base.py
-│   │       ├── factory.py
-│   │       └── local_storage.py
-│   │
-│   └── main.py
-│
-├── alembic/
-├── .env
-├── .gitignore
-└── README.md
+모든 요청은 JWT 인증 필요
+
+
+Authorization: Bearer {ACCESS_TOKEN}
+
+
+---
+
+# 4. API 명세
+
+---
+
+## 4.1 이미지 생성 Job 생성
+
+### POST /image-jobs
+
+```json
+{
+  "project_id": "PROJECT_UUID",
+  "prompt": "cyberpunk girl",
+  "negative_prompt": "blurry",
+  "width": 512,
+  "height": 512
+}
+Response
+{
+  "id": "JOB_UUID",
+  "status": "queued",
+  "input_payload": {
+    "prompt": "cyberpunk girl",
+    "width": 512,
+    "height": 512
+  }
+}
+4.2 Job 상태 조회
+GET /image-jobs/{job_id}
+{
+  "id": "JOB_UUID",
+  "status": "running | completed | failed",
+  "output_payload": {...}
+}
+4.3 Job 상태 변경 (모델 서버 전용)
+PATCH /image-jobs/{job_id}
+▶ running 상태
+{
+  "status": "running"
+}
+
+자동 동작:
+
+started_at 기록됨
+
+▶ completed 상태 
+{
+  "status": "completed",
+  "output_payload": {
+    "filename": "sample.png",
+    "storage_path": "generated/2026/03/sample.png",
+    "public_url": "https://example.com/sample.png",
+    "content_type": "image/png",
+    "storage_provider": "firebase",
+    "width": 512,
+    "height": 512
+  }
+}
+
+자동 동작:
+
+✔ output_payload 저장
+✔ completed_at 기록
+✔ media_meta 자동 생성
+✔ job_id로 media 연결
+▶ failed 상태
+{
+  "status": "failed",
+  "error_message": "generation failed"
+}
+5. Model Integration Guide
+
+모델 서버는 아래 규칙을 반드시 따라야 합니다.
+
+5.1 해야 할 일
+1. job 생성됨 (queued)
+2. 모델 서버가 job 처리 시작
+3. PATCH → running
+4. 이미지 생성
+5. 스토리지 업로드
+6. public URL 확보
+7. PATCH → completed
+5.2 반드시 맞춰야 하는 output_payload 형식
+{
+  "filename": "string",
+  "storage_path": "string",
+  "public_url": "string",
+  "content_type": "image/png",
+  "storage_provider": "firebase",
+  "width": 512,
+  "height": 512
+}
+
+⚠️ 이 형식이 틀리면:
+
+media 생성 실패
+프론트에서 결과 안 보임
+5.3 예시 흐름
+PATCH /image-jobs/{job_id}
+
+{
+  "status": "running"
+}
+
+→ 이미지 생성
+
+PATCH /image-jobs/{job_id}
+
+{
+  "status": "completed",
+  "output_payload": {...}
+}
+6. Frontend Integration Guide
+6.1 프론트 흐름
+1. POST /image-jobs
+2. job_id 받기
+3. polling (GET /image-jobs/{job_id})
+4. status == completed
+5. GET /media/project/{project_id}
+6. public_url로 이미지 렌더링
+6.2 polling 예시
+setInterval(async () => {
+  const job = await getJob(jobId)
+
+  if (job.status === "completed") {
+    const media = await getMedia(projectId)
+    render(media)
+  }
+}, 2000)
+7. Media 조회
+GET /media/project/{project_id}
+{
+  "items": [
+    {
+      "id": "...",
+      "public_url": "https://...",
+      "width": 512,
+      "height": 512
+    }
+  ]
+}
+8. 데이터 구조 요약
+Job
+status:
+- queued
+- running
+- completed
+- failed
+MediaAsset
+job_id → 어떤 job 결과인지 연결됨
+public_url → 프론트 렌더링용
+storage_path → 내부 저장 위치
+9. 환경 변수
+
+.env 파일 생성:
+
+DATABASE_URL=
+SECRET_KEY=
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# optional
+COMFYUI_BASE_URL=
+STORAGE_PROVIDER=
+
+10. 실행 방법
+venv\Scripts\activate
+uvicorn app.main:app --reload
+
