@@ -1,1 +1,1 @@
-# artwork CRUD functions
+﻿# artwork CRUD functions

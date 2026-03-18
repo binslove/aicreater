@@ -1,4 +1,5 @@
-﻿from __future__ import annotations
+﻿
+from __future__ import annotations
 
 from typing import Any
 from uuid import UUID
@@ -9,26 +10,25 @@ from sqlalchemy.orm import Session
 from app.db.models import Job
 
 
-def create_image_job(
+def create_job(
     db: Session,
     *,
     user_id: UUID,
     project_id: UUID,
-    prompt: str,
-    negative_prompt: str | None = None,
-    width: int = 512,
-    height: int = 512,
+    job_type: str,
+    input_payload: dict[str, Any],
 ) -> Job:
     job = Job(
         user_id=user_id,
         project_id=project_id,
-        job_type="image_generation",
+        job_type=job_type,
         status="queued",
-        input_payload={
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "width": width,
-            "height": height,
+        input_payload=input_payload,
+        output_payload={
+            "progress": {
+                "stage": "queued",
+                "percent": 0,
+            }
         },
     )
     db.add(job)
@@ -37,25 +37,19 @@ def create_image_job(
     return job
 
 
-def get_image_job_by_id(db: Session, *, job_id: UUID) -> Job | None:
-    stmt = select(Job).where(
-        Job.id == job_id,
-        Job.job_type == "image_generation",
-    )
+def get_job_by_id(db: Session, *, job_id: UUID) -> Job | None:
+    stmt = select(Job).where(Job.id == job_id)
     return db.scalar(stmt)
 
 
-def get_image_jobs_by_project(
+def get_jobs_by_project(
     db: Session,
     *,
     project_id: UUID,
     skip: int = 0,
     limit: int = 20,
 ) -> tuple[list[Job], int]:
-    conditions = [
-        Job.project_id == project_id,
-        Job.job_type == "image_generation",
-    ]
+    conditions = [Job.project_id == project_id]
 
     total_stmt = select(func.count()).select_from(Job).where(*conditions)
     total = db.scalar(total_stmt) or 0
@@ -72,7 +66,7 @@ def get_image_jobs_by_project(
     return items, total
 
 
-def update_image_job(
+def update_job(
     db: Session,
     *,
     db_job: Job,
