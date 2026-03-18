@@ -177,4 +177,3 @@ class CreatorProfile(Base):
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="creator_profile")
-

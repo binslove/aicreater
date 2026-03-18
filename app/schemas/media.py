@@ -19,7 +19,6 @@ class MediaStatsResponse(BaseModel):
 
 
 class MediaCreate(BaseModel):
-    user_id: UUID
     project_id: UUID
     job_id: Optional[UUID] = None
 

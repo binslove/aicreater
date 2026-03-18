@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ImageJobCreate(BaseModel):
@@ -13,6 +13,14 @@ class ImageJobCreate(BaseModel):
     negative_prompt: str | None = None
     width: int = Field(default=512, ge=64, le=2048)
     height: int = Field(default=512, ge=64, le=2048)
+
+
+class ImageJobUpdate(BaseModel):
+    status: str | None = Field(default=None)
+    output_payload: dict[str, Any] | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class ImageJobRead(BaseModel):
@@ -30,3 +38,8 @@ class ImageJobRead(BaseModel):
     completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class ImageJobListResponse(BaseModel):
+    items: list[ImageJobRead]
+    total: int

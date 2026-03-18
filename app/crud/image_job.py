@@ -1,10 +1,9 @@
 ﻿from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import Job
@@ -16,9 +15,9 @@ def create_image_job(
     user_id: UUID,
     project_id: UUID,
     prompt: str,
-    negative_prompt: str | None,
-    width: int,
-    height: int,
+    negative_prompt: str | None = None,
+    width: int = 512,
+    height: int = 512,
 ) -> Job:
     job = Job(
         user_id=user_id,
@@ -38,7 +37,7 @@ def create_image_job(
     return job
 
 
-def get_image_job_by_id(db: Session, job_id: UUID) -> Job | None:
+def get_image_job_by_id(db: Session, *, job_id: UUID) -> Job | None:
     stmt = select(Job).where(
         Job.id == job_id,
         Job.job_type == "image_generation",
@@ -46,38 +45,43 @@ def get_image_job_by_id(db: Session, job_id: UUID) -> Job | None:
     return db.scalar(stmt)
 
 
-def update_image_job_status(
+def get_image_jobs_by_project(
     db: Session,
     *,
-    job: Job,
-    status: str,
-    error_message: str | None = None,
-    started_at: datetime | None = None,
-    completed_at: datetime | None = None,
-) -> Job:
-    job.status = status
-    job.error_message = error_message
+    project_id: UUID,
+    skip: int = 0,
+    limit: int = 20,
+) -> tuple[list[Job], int]:
+    conditions = [
+        Job.project_id == project_id,
+        Job.job_type == "image_generation",
+    ]
 
-    if started_at is not None:
-        job.started_at = started_at
+    total_stmt = select(func.count()).select_from(Job).where(*conditions)
+    total = db.scalar(total_stmt) or 0
 
-    if completed_at is not None:
-        job.completed_at = completed_at
+    stmt = (
+        select(Job)
+        .where(*conditions)
+        .order_by(Job.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    items = list(db.scalars(stmt).all())
 
-    db.add(job)
-    db.commit()
-    db.refresh(job)
-    return job
+    return items, total
 
 
-def update_image_job_output(
+def update_image_job(
     db: Session,
     *,
-    job: Job,
-    output_payload: dict[str, Any],
+    db_job: Job,
+    update_data: dict[str, Any],
 ) -> Job:
-    job.output_payload = output_payload
-    db.add(job)
+    for field, value in update_data.items():
+        setattr(db_job, field, value)
+
+    db.add(db_job)
     db.commit()
-    db.refresh(job)
-    return job
+    db.refresh(db_job)
+    return db_job
