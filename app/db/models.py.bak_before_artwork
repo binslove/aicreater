@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Integer, TIMESTAMP, ForeignKey, BigInteger, UniqueConstraint
+﻿from sqlalchemy import Column, String, Text, Integer, TIMESTAMP, ForeignKey, BigInteger, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -90,9 +90,6 @@ class MediaAsset(Base):
     duration_seconds = Column(Integer, nullable=True)
 
     prompt_text = Column(Text, nullable=True)
-    title = Column(String(255), nullable=True)
-    description = Column(Text, nullable=True)
-    visibility = Column(String(20), nullable=False, default="public")
     error_message = Column(Text, nullable=True)
 
     created_at = Column(TIMESTAMP, server_default=func.now())
@@ -177,4 +174,3 @@ class CreatorProfile(Base):
     updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="creator_profile")
-

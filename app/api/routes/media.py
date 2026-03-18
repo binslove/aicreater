@@ -1,0 +1,86 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.crud.media import (
+    create_media,
+    get_media_by_id,
+    get_media_list_by_project,
+    get_media_stats,
+    increment_media_view_count,
+    update_media,
+)
+from app.db.database import get_db
+from app.schemas.media import (
+    MediaCreate,
+    MediaDetailResponse,
+    MediaListResponse,
+    MediaResponse,
+    MediaUpdate,
+)
+
+router = APIRouter(prefix="/media", tags=["media"])
+
+
+@router.post("", response_model=MediaResponse, status_code=status.HTTP_201_CREATED)
+def create_media_endpoint(
+    payload: MediaCreate,
+    db: Session = Depends(get_db),
+) -> MediaResponse:
+    media = create_media(db=db, media_in=payload)
+    return media
+
+
+@router.get("/{media_id}", response_model=MediaDetailResponse)
+def get_media_endpoint(
+    media_id: UUID,
+    db: Session = Depends(get_db),
+) -> MediaDetailResponse:
+    media = get_media_by_id(db=db, media_id=media_id)
+    if media is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media not found",
+        )
+
+    increment_media_view_count(db=db, media_asset_id=media_id)
+    stats = get_media_stats(db=db, media_asset_id=media_id)
+
+    data = MediaResponse.model_validate(media, from_attributes=True).model_dump()
+    return MediaDetailResponse(**data, stats=stats)
+
+
+@router.patch("/{media_id}", response_model=MediaResponse)
+def update_media_endpoint(
+    media_id: UUID,
+    payload: MediaUpdate,
+    db: Session = Depends(get_db),
+) -> MediaResponse:
+    media = get_media_by_id(db=db, media_id=media_id)
+    if media is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media not found",
+        )
+
+    updated = update_media(db=db, media=media, media_in=payload)
+    return updated
+
+
+@router.get("/project/{project_id}", response_model=MediaListResponse)
+def list_project_media_endpoint(
+    project_id: UUID,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+) -> MediaListResponse:
+    items, total = get_media_list_by_project(
+        db=db,
+        project_id=project_id,
+        skip=skip,
+        limit=limit,
+    )
+    return MediaListResponse(items=items, total=total)
